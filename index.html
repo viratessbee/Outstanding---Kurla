@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outstanding Bills – Salesperson View</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--text:#1c2430;--muted:#6b7686;--line:#e3e7ee;--accent:#1f5eff;
+--g:#1a9d5c;--y:#d99a00;--o:#e86a10;--r:#d62f3a;--rbg:#fdeceb;--head:#eef1f6}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12161c;--card:#1b212a;--text:#e8ecf2;--muted:#93a0b2;--line:#2b3340;--accent:#6c97ff;--head:#232b36;--rbg:#3a1f22}}
+:root[data-theme="dark"]{--bg:#12161c;--card:#1b212a;--text:#e8ecf2;--muted:#93a0b2;--line:#2b3340;--accent:#6c97ff;--head:#232b36;--rbg:#3a1f22}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:14px 16px;position:sticky;top:0;z-index:5}
+.top{max-width:1100px;margin:auto;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+h1{font-size:18px;margin:0}
+.asof{color:var(--muted);font-size:13px}
+main{max-width:1100px;margin:auto;padding:14px 12px 60px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+select,input{font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text)}
+select{min-width:170px;font-weight:600}input{flex:1;min-width:160px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px}
+.c{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.c small{color:var(--muted);display:block;font-size:12px}.c b{font-size:18px}
+.bar{display:flex;height:10px;border-radius:6px;overflow:hidden;margin:4px 0 14px;background:var(--line)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-bottom:12px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.party{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden}
+.ph{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:11px 12px;cursor:pointer;flex-wrap:wrap}
+.ph:hover{background:var(--head)}
+.pn{font-weight:600;flex:1;min-width:200px}
+.pm{color:var(--muted);font-size:12px;font-weight:400;display:block}
+.amt{font-weight:700;font-variant-numeric:tabular-nums}
+.chip{font-size:12px;padding:2px 8px;border-radius:99px;font-weight:600;white-space:nowrap}
+.b0{background:#dff5e9;color:#0f6b3c}.b1{background:#fff3cc;color:#7a5600}.b2{background:#ffe3cf;color:#9a4300}.b3{background:#fbd5d8;color:#9b1c25}.b4{background:#d62f3a;color:#fff}
+.bd{display:none;border-top:1px solid var(--line);overflow-x:auto}
+.party.open .bd{display:block}
+table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:right;white-space:nowrap}
+th{background:var(--head);color:var(--muted);font-weight:600;font-size:12px}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+tr+tr td{border-top:1px solid var(--line)}
+tfoot td{font-weight:700;background:var(--head)}
+.cr{color:var(--g)}
+.empty{text-align:center;color:var(--muted);padding:40px}
+button.t{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:8px 10px;cursor:pointer;font:inherit}
+@media(max-width:600px){.top h1{font-size:16px}}
+</style>
+</head>
+<body>
+<header><div class="top">
+  <div><h1>Outstanding Bills – Party &amp; Bill wise</h1><div class="asof" id="asof">Loading…</div></div>
+  <button class="t" id="theme">◐ Theme</button>
+</div></header>
+<main>
+  <div class="controls">
+    <select id="sp"></select>
+    <input id="q" type="search" placeholder="Search party or invoice no.">
+    <select id="sort">
+      <option value="amt">Sort: Highest outstanding</option>
+      <option value="old">Sort: Oldest dispatch first</option>
+      <option value="name">Sort: Party name</option>
+    </select>
+    <button class="t" id="toggle">Expand all</button>
+  </div>
+  <div class="cards" id="cards"></div>
+  <div class="bar" id="bar"></div>
+  <div class="legend" id="legend"></div>
+  <div id="list"></div>
+  <p class="asof">Days = report date minus dispatch date (bills are counted from the dispatch date, not the invoice date).</p>
+</main>
+<script>
+const BUCKETS=[{n:"0–15 days",max:15},{n:"16–30 days",max:30},{n:"31–45 days",max:45},{n:"46–60 days",max:60},{n:"60+ days",max:1e9}];
+const COLORS=["#1a9d5c","#d99a00","#e86a10","#d62f3a","#8e1520"];
+const $=id=>document.getElementById(id);
+const inr=n=>(n<0?"−":"")+Math.abs(Math.round(n)).toLocaleString("en-IN");
+const fmtD=s=>{if(!s)return"—";const[y,m,d]=s.split("-");return `${d}-${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m-1]}-${y}`};
+const dayDiff=(a,b)=>Math.round((Date.parse(a)-Date.parse(b))/864e5);
+const bucket=d=>BUCKETS.findIndex(b=>d<=b.max);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let DATA,BYSP={},allOpen=false;
+
+fetch("data.json?v="+Date.now()).then(r=>r.json()).then(init).catch(e=>{$("asof").textContent="Could not load data.json";});
+
+function init(D){
+  DATA=D;
+  // group by salesperson at bill level, so a party shared by two salespeople is split correctly
+  D.parties.forEach(p=>{
+    const m={};
+    p.rows.forEach(r=>{(m[r.sales]=m[r.sales]||[]).push(r)});
+    for(const s in m){
+      const rows=m[s].map(r=>({...r,days:r.dispatch?dayDiff(D.report_date,r.dispatch):null}));
+      (BYSP[s]=BYSP[s]||[]).push({party:p.party,rows});
+    }
+  });
+  $("asof").textContent="Outstanding as on "+fmtD(D.report_date)+" · dispatched invoices only";
+  const names=Object.keys(BYSP).sort((a,b)=>a.localeCompare(b));
+  $("sp").innerHTML=names.map(n=>`<option>${esc(n)}</option>`).join("");
+  const saved=localStorage.getItem("sp");
+  try{ if(saved&&BYSP[saved]) $("sp").value=saved; }catch(e){}
+  const h=decodeURIComponent(location.hash.slice(1));
+  if(BYSP[h]) $("sp").value=h;
+  ["sp","q","sort"].forEach(i=>$(i).addEventListener("input",render));
+  $("sp").addEventListener("change",()=>{try{localStorage.setItem("sp",$("sp").value)}catch(e){};location.hash=encodeURIComponent($("sp").value)});
+  $("toggle").onclick=()=>{allOpen=!allOpen;$("toggle").textContent=allOpen?"Collapse all":"Expand all";document.querySelectorAll(".party").forEach(e=>e.classList.toggle("open",allOpen))};
+  $("list").addEventListener("click",e=>{const h=e.target.closest(".ph");if(h)h.parentElement.classList.toggle("open")});
+  render();
+}
+
+function render(){
+  const sp=$("sp").value,q=$("q").value.trim().toLowerCase();
+  let parties=(BYSP[sp]||[]).map(p=>{
+    const rows=p.rows;
+    const total=rows.reduce((s,r)=>s+r.net,0);
+    const bills=rows.filter(r=>r.days!==null&&r.net>0);
+    const maxDays=bills.length?Math.max(...bills.map(r=>r.days)):null;
+    const oldest=bills.length?bills.reduce((a,b)=>b.days>a.days?b:a).dispatch:null;
+    return {...p,total,maxDays,oldest};
+  }).filter(p=>Math.abs(p.total)>0.5||p.rows.some(r=>r.net));
+  if(q) parties=parties.filter(p=>p.party.toLowerCase().includes(q)||p.rows.some(r=>r.inv.toLowerCase().includes(q)));
+  const s=$("sort").value;
+  parties.sort(s==="amt"?(a,b)=>b.total-a.total:s==="old"?(a,b)=>(b.maxDays??-1)-(a.maxDays??-1):(a,b)=>a.party.localeCompare(b.party));
+
+  // totals + ageing
+  const ag=BUCKETS.map(()=>0);let tot=0,credit=0,nb=0;
+  parties.forEach(p=>p.rows.forEach(r=>{
+    tot+=r.net;
+    if(r.days===null||r.net<=0){if(r.net<0)credit+=r.net;return}
+    ag[bucket(r.days)]+=r.net;nb++;
+  }));
+  const over30=ag[2]+ag[3]+ag[4];
+  $("cards").innerHTML=[["Net outstanding",inr(tot)],["Parties",parties.length],["Open bills",nb],["Over 30 days",inr(over30)],["Over 60 days",inr(ag[4])],["Unallocated credit",inr(credit)]]
+    .map(([a,b])=>`<div class="c"><small>${a}</small><b>${b}</b></div>`).join("");
+  const posTot=ag.reduce((a,b)=>a+b,0)||1;
+  $("bar").innerHTML=ag.map((v,i)=>`<div title="${BUCKETS[i].n}: ${inr(v)}" style="width:${v/posTot*100}%;background:${COLORS[i]}"></div>`).join("");
+  $("legend").innerHTML=ag.map((v,i)=>`<span><i class="dot" style="background:${COLORS[i]}"></i>${BUCKETS[i].n}: <b>${inr(v)}</b></span>`).join("");
+
+  if(!parties.length){$("list").innerHTML='<div class="empty">No matching parties.</div>';return}
+  $("list").innerHTML=parties.map(p=>{
+    const rows=p.rows.slice().sort((a,b)=>(b.days??-1)-(a.days??-1));
+    const inv=p.rows.reduce((s,r)=>s+r.inv_amt,0),rec=p.rows.reduce((s,r)=>s+r.received,0);
+    const chip=p.maxDays===null?"":`<span class="chip b${bucket(p.maxDays)}">Oldest: ${p.maxDays} days</span>`;
+    return `<div class="party${allOpen?" open":""}">
+      <div class="ph"><div class="pn">${esc(p.party)}<span class="pm">${p.rows.length} entries${p.oldest?" · oldest dispatch "+fmtD(p.oldest):""}</span></div>${chip}<div class="amt">₹ ${inr(p.total)}</div></div>
+      <div class="bd"><table><thead><tr><th>Invoice</th><th>Inv. date</th><th>Dispatch</th><th>Days</th><th>Inv. amt</th><th>Received</th><th>Outstanding</th></tr></thead><tbody>
+      ${rows.map(r=>{
+        const credit=!r.inv_amt&&r.net<0;
+        return `<tr><td>${esc(r.inv||r.book)}${credit?" <small>(unallocated)</small>":""}</td><td>${fmtD(r.inv_date)}</td><td>${fmtD(r.dispatch)}</td>
+        <td>${r.days===null?"—":`<span class="chip b${bucket(r.days)}">${r.days}</span>`}</td>
+        <td>${r.inv_amt?inr(r.inv_amt):"—"}</td><td>${r.received?inr(r.received):"—"}</td><td class="${r.net<0?"cr":""}"><b>${inr(r.net)}</b></td></tr>`}).join("")}
+      </tbody><tfoot><tr><td colspan="4">Total</td><td>${inr(inv)}</td><td>${inr(rec)}</td><td>${inr(p.total)}</td></tr></tfoot></table></div></div>`;
+  }).join("");
+}
+$("theme").onclick=()=>{const r=document.documentElement,dark=getComputedStyle(r).getPropertyValue("--bg").trim()==="#12161c";r.dataset.theme=dark?"light":"dark"};
+</script>
+</body>
+</html>
