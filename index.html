@@ -44,6 +44,12 @@ tr+tr td{border-top:1px solid var(--line)}
 tfoot td{font-weight:700;background:var(--head)}
 .cr{color:var(--g)}
 .empty{text-align:center;color:var(--muted);padding:40px}
+td.st{text-align:right;white-space:nowrap}
+.mb{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:7px;padding:4px 8px;cursor:pointer;font:inherit;font-size:12px;margin-left:4px}
+.mb.ok{border-color:var(--g);color:var(--g)}.mb.cq{border-color:var(--accent);color:var(--accent)}.mb.un{border-color:var(--r);color:var(--r)}
+.mk{font-size:12px;font-weight:600}.mk.ok{color:var(--g)}.mk.cq{color:var(--accent)}
+tr.marked td{opacity:.6}tr.marked td.st{opacity:1}
+.note{background:var(--head);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--muted);margin-bottom:12px}
 button.t{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:8px 10px;cursor:pointer;font:inherit}
 @media(max-width:600px){.top h1{font-size:16px}}
 </style>
@@ -62,8 +68,11 @@ button.t{border:1px solid var(--line);background:var(--card);color:var(--text);b
       <option value="old">Sort: Oldest dispatch first</option>
       <option value="name">Sort: Party name</option>
     </select>
+    <select id="flt"><option value="all">Show: All bills</option><option value="pend">Show: Not marked yet</option><option value="mark">Show: Marked only</option></select>
     <button class="t" id="toggle">Expand all</button>
   </div>
+  <div class="note">Marks are saved on this device/browser for the selected salesperson and stay after refresh and after new data is uploaded.
+    <button class="mb" id="bk">⬇ Backup marks</button><button class="mb" id="rs">⬆ Restore</button><input type="file" id="rsf" accept=".json" hidden></div>
   <div class="cards" id="cards"></div>
   <div class="bar" id="bar"></div>
   <div class="legend" id="legend"></div>
@@ -79,13 +88,18 @@ const fmtD=s=>{if(!s)return"—";const[y,m,d]=s.split("-");return `${d}-${["Jan"
 const dayDiff=(a,b)=>Math.round((Date.parse(a)-Date.parse(b))/864e5);
 const bucket=d=>BUCKETS.findIndex(b=>d<=b.max);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let DATA,BYSP={},allOpen=false;
+let DATA,BYSP={},allOpen=false,OPEN=new Set(),MARKS={};
+const MK="bill_marks_v1";
+function loadMarks(){try{MARKS=JSON.parse(localStorage.getItem(MK)||"{}")}catch(e){MARKS={}}}
+function saveMarks(){try{localStorage.setItem(MK,JSON.stringify(MARKS))}catch(e){alert("Could not save marks – browser storage is blocked.")}}
+const bkey=r=>r.book+"|"+r.inv+"|"+(r.inv_date||"");
+const getMark=(sp,r)=>(MARKS[sp]||{})[bkey(r)];
+function setMark(sp,k,v){MARKS[sp]=MARKS[sp]||{};if(v)MARKS[sp][k]=v;else delete MARKS[sp][k];saveMarks()}
 
 fetch("data.json?v="+Date.now()).then(r=>r.json()).then(init).catch(e=>{$("asof").textContent="Could not load data.json";});
 
 function init(D){
-  DATA=D;
-  // group by salesperson at bill level, so a party shared by two salespeople is split correctly
+  DATA=D;loadMarks();
   D.parties.forEach(p=>{
     const m={};
     p.rows.forEach(r=>{(m[r.sales]=m[r.sales]||[]).push(r)});
@@ -97,40 +111,65 @@ function init(D){
   $("asof").textContent="Outstanding as on "+fmtD(D.report_date)+" · dispatched invoices only";
   const names=Object.keys(BYSP).sort((a,b)=>a.localeCompare(b));
   $("sp").innerHTML=names.map(n=>`<option>${esc(n)}</option>`).join("");
-  const saved=localStorage.getItem("sp");
-  try{ if(saved&&BYSP[saved]) $("sp").value=saved; }catch(e){}
+  let saved=null;try{saved=localStorage.getItem("sp")}catch(e){}
+  if(saved&&BYSP[saved])$("sp").value=saved;
   const h=decodeURIComponent(location.hash.slice(1));
-  if(BYSP[h]) $("sp").value=h;
-  ["sp","q","sort"].forEach(i=>$(i).addEventListener("input",render));
+  if(BYSP[h])$("sp").value=h;
+  ["sp","q","sort","flt"].forEach(i=>$(i).addEventListener("input",render));
   $("sp").addEventListener("change",()=>{try{localStorage.setItem("sp",$("sp").value)}catch(e){};location.hash=encodeURIComponent($("sp").value)});
-  $("toggle").onclick=()=>{allOpen=!allOpen;$("toggle").textContent=allOpen?"Collapse all":"Expand all";document.querySelectorAll(".party").forEach(e=>e.classList.toggle("open",allOpen))};
-  $("list").addEventListener("click",e=>{const h=e.target.closest(".ph");if(h)h.parentElement.classList.toggle("open")});
+  $("toggle").onclick=()=>{allOpen=!allOpen;$("toggle").textContent=allOpen?"Collapse all":"Expand all";OPEN.clear();document.querySelectorAll(".party").forEach(e=>e.classList.toggle("open",allOpen))};
+  $("list").addEventListener("click",e=>{
+    const b=e.target.closest("[data-act]");
+    if(b){
+      const sp=$("sp").value,k=b.dataset.k,a=b.dataset.act;
+      if(a==="un"){setMark(sp,k,null)}
+      else{setMark(sp,k,{s:a,t:new Date().toISOString().slice(0,10)})}
+      render();return;
+    }
+    const h=e.target.closest(".ph");
+    if(h){const el=h.parentElement;el.classList.toggle("open");const n=el.dataset.p;el.classList.contains("open")?OPEN.add(n):OPEN.delete(n)}
+  });
+  $("bk").onclick=()=>{
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(MARKS)],{type:"application/json"}));
+    a.download="bill_marks_backup_"+new Date().toISOString().slice(0,10)+".json";a.click()};
+  $("rs").onclick=()=>$("rsf").click();
+  $("rsf").onchange=e=>{
+    const f=e.target.files[0];if(!f)return;
+    f.text().then(t=>{
+      const o=JSON.parse(t);
+      for(const sp in o){MARKS[sp]=Object.assign(MARKS[sp]||{},o[sp])}
+      saveMarks();render();alert("Marks restored.")
+    }).catch(()=>alert("Invalid backup file."));e.target.value="";
+  };
   render();
 }
 
 function render(){
-  const sp=$("sp").value,q=$("q").value.trim().toLowerCase();
+  const sp=$("sp").value,q=$("q").value.trim().toLowerCase(),flt=$("flt").value;
   let parties=(BYSP[sp]||[]).map(p=>{
-    const rows=p.rows;
+    const rows=p.rows.map(r=>({...r,mk:getMark(sp,r)}));
     const total=rows.reduce((s,r)=>s+r.net,0);
-    const bills=rows.filter(r=>r.days!==null&&r.net>0);
+    const pend=rows.filter(r=>!r.mk).reduce((s,r)=>s+r.net,0);
+    const bills=rows.filter(r=>r.days!==null&&r.net>0&&!r.mk);
     const maxDays=bills.length?Math.max(...bills.map(r=>r.days)):null;
     const oldest=bills.length?bills.reduce((a,b)=>b.days>a.days?b:a).dispatch:null;
-    return {...p,total,maxDays,oldest};
-  }).filter(p=>Math.abs(p.total)>0.5||p.rows.some(r=>r.net));
-  if(q) parties=parties.filter(p=>p.party.toLowerCase().includes(q)||p.rows.some(r=>r.inv.toLowerCase().includes(q)));
+    return {...p,rows,total,pend,maxDays,oldest};
+  }).filter(p=>p.rows.some(r=>r.net));
+  if(q)parties=parties.filter(p=>p.party.toLowerCase().includes(q)||p.rows.some(r=>r.inv.toLowerCase().includes(q)));
+  if(flt==="pend")parties=parties.filter(p=>p.rows.some(r=>!r.mk));
+  if(flt==="mark")parties=parties.filter(p=>p.rows.some(r=>r.mk));
   const s=$("sort").value;
-  parties.sort(s==="amt"?(a,b)=>b.total-a.total:s==="old"?(a,b)=>(b.maxDays??-1)-(a.maxDays??-1):(a,b)=>a.party.localeCompare(b.party));
+  parties.sort(s==="amt"?(a,b)=>b.pend-a.pend:s==="old"?(a,b)=>(b.maxDays??-1)-(a.maxDays??-1):(a,b)=>a.party.localeCompare(b.party));
 
-  // totals + ageing
-  const ag=BUCKETS.map(()=>0);let tot=0,credit=0,nb=0;
+  const ag=BUCKETS.map(()=>0);let tot=0,credit=0,nb=0,cl=0,cq=0;
   parties.forEach(p=>p.rows.forEach(r=>{
     tot+=r.net;
+    if(r.mk){if(r.mk.s==="ok")cl+=r.net;else cq+=r.net;return}
     if(r.days===null||r.net<=0){if(r.net<0)credit+=r.net;return}
     ag[bucket(r.days)]+=r.net;nb++;
   }));
-  const over30=ag[2]+ag[3]+ag[4];
-  $("cards").innerHTML=[["Net outstanding",inr(tot)],["Parties",parties.length],["Open bills",nb],["Over 30 days",inr(over30)],["Over 60 days",inr(ag[4])],["Unallocated credit",inr(credit)]]
+  const pending=tot-cl-cq;
+  $("cards").innerHTML=[["Net outstanding",inr(tot)],["Still to follow up",inr(pending)],["Marked cleared",inr(cl)],["Cheque collected",inr(cq)],["Parties",parties.length],["Open bills (unmarked)",nb],["Over 30 days (unmarked)",inr(ag[2]+ag[3]+ag[4])],["Over 60 days (unmarked)",inr(ag[4])]]
     .map(([a,b])=>`<div class="c"><small>${a}</small><b>${b}</b></div>`).join("");
   const posTot=ag.reduce((a,b)=>a+b,0)||1;
   $("bar").innerHTML=ag.map((v,i)=>`<div title="${BUCKETS[i].n}: ${inr(v)}" style="width:${v/posTot*100}%;background:${COLORS[i]}"></div>`).join("");
@@ -138,18 +177,24 @@ function render(){
 
   if(!parties.length){$("list").innerHTML='<div class="empty">No matching parties.</div>';return}
   $("list").innerHTML=parties.map(p=>{
-    const rows=p.rows.slice().sort((a,b)=>(b.days??-1)-(a.days??-1));
-    const inv=p.rows.reduce((s,r)=>s+r.inv_amt,0),rec=p.rows.reduce((s,r)=>s+r.received,0);
+    let rows=p.rows.slice().sort((a,b)=>(b.days??-1)-(a.days??-1));
+    if(flt==="pend")rows=rows.filter(r=>!r.mk);
+    if(flt==="mark")rows=rows.filter(r=>r.mk);
+    const inv=rows.reduce((s,r)=>s+r.inv_amt,0),rec=rows.reduce((s,r)=>s+r.received,0),sub=rows.reduce((s,r)=>s+r.net,0);
     const chip=p.maxDays===null?"":`<span class="chip b${bucket(p.maxDays)}">Oldest: ${p.maxDays} days</span>`;
-    return `<div class="party${allOpen?" open":""}">
-      <div class="ph"><div class="pn">${esc(p.party)}<span class="pm">${p.rows.length} entries${p.oldest?" · oldest dispatch "+fmtD(p.oldest):""}</span></div>${chip}<div class="amt">₹ ${inr(p.total)}</div></div>
-      <div class="bd"><table><thead><tr><th>Invoice</th><th>Inv. date</th><th>Dispatch</th><th>Days</th><th>Inv. amt</th><th>Received</th><th>Outstanding</th></tr></thead><tbody>
+    const open=allOpen||OPEN.has(p.party);
+    return `<div class="party${open?" open":""}" data-p="${esc(p.party)}">
+      <div class="ph"><div class="pn">${esc(p.party)}<span class="pm">${p.rows.length} entries${p.oldest?" · oldest unmarked dispatch "+fmtD(p.oldest):""}${p.pend!==p.total?" · total "+inr(p.total):""}</span></div>${chip}<div class="amt">₹ ${inr(p.pend)}</div></div>
+      <div class="bd"><table><thead><tr><th>Invoice</th><th>Inv. date</th><th>Dispatch</th><th>Days</th><th>Inv. amt</th><th>Received</th><th>Outstanding</th><th>Status</th></tr></thead><tbody>
       ${rows.map(r=>{
-        const credit=!r.inv_amt&&r.net<0;
-        return `<tr><td>${esc(r.inv||r.book)}${credit?" <small>(unallocated)</small>":""}</td><td>${fmtD(r.inv_date)}</td><td>${fmtD(r.dispatch)}</td>
+        const k=esc(bkey(r)),credit=!r.inv_amt&&r.net<0;
+        const st=credit?"":r.mk
+          ?`<span class="mk ${r.mk.s}">${r.mk.s==="ok"?"✔ Cleared":"🧾 Cheque"} · ${fmtD(r.mk.t).slice(0,6)}</span><button class="mb un" data-act="un" data-k="${k}">Undo</button>`
+          :`<button class="mb ok" data-act="ok" data-k="${k}">✔ Cleared</button><button class="mb cq" data-act="cq" data-k="${k}">🧾 Cheque</button>`;
+        return `<tr class="${r.mk?"marked":""}"><td>${esc(r.inv||r.book)}${credit?" <small>(unallocated)</small>":""}</td><td>${fmtD(r.inv_date)}</td><td>${fmtD(r.dispatch)}</td>
         <td>${r.days===null?"—":`<span class="chip b${bucket(r.days)}">${r.days}</span>`}</td>
-        <td>${r.inv_amt?inr(r.inv_amt):"—"}</td><td>${r.received?inr(r.received):"—"}</td><td class="${r.net<0?"cr":""}"><b>${inr(r.net)}</b></td></tr>`}).join("")}
-      </tbody><tfoot><tr><td colspan="4">Total</td><td>${inr(inv)}</td><td>${inr(rec)}</td><td>${inr(p.total)}</td></tr></tfoot></table></div></div>`;
+        <td>${r.inv_amt?inr(r.inv_amt):"—"}</td><td>${r.received?inr(r.received):"—"}</td><td class="${r.net<0?"cr":""}"><b>${inr(r.net)}</b></td><td class="st">${st}</td></tr>`}).join("")}
+      </tbody><tfoot><tr><td colspan="4">Total</td><td>${inr(inv)}</td><td>${inr(rec)}</td><td>${inr(sub)}</td><td></td></tr></tfoot></table></div></div>`;
   }).join("");
 }
 $("theme").onclick=()=>{const r=document.documentElement,dark=getComputedStyle(r).getPropertyValue("--bg").trim()==="#12161c";r.dataset.theme=dark?"light":"dark"};
