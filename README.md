@@ -18,6 +18,6 @@ python convert.py OS_<date>.xlsx      # creates a fresh data.json
 Upload the new `data.json` to the repo (Add file → Upload files → replace). Done.
 
 ## Marking bills
-Each bill has **Cleared** / **Cheque** buttons and an **Undo**. Marks are stored in the salesperson's
+Each bill has a tick box; ticked bills turn green (cleared); untick to undo. Marks are stored in the salesperson's
 own browser (localStorage), keyed by salesperson + book + invoice no + invoice date, so they stay after
 refresh and after a new `data.json` is uploaded. Use *Backup marks* / *Restore* to move marks to another phone.

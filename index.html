@@ -48,7 +48,7 @@ td.st{text-align:right;white-space:nowrap}
 .mb{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:7px;padding:4px 8px;cursor:pointer;font:inherit;font-size:12px;margin-left:4px}
 .mb.ok{border-color:var(--g);color:var(--g)}.mb.cq{border-color:var(--accent);color:var(--accent)}.mb.un{border-color:var(--r);color:var(--r)}
 .mk{font-size:12px;font-weight:600}.mk.ok{color:var(--g)}.mk.cq{color:var(--accent)}
-tr.marked td{opacity:.6}tr.marked td.st{opacity:1}
+tr.marked td{background:#dff5e9;color:#0f4d2c}tr.marked .chip{outline:1px solid #fff}input.ck{width:20px;height:20px;accent-color:#1a9d5c;cursor:pointer;flex:none;min-width:0;padding:0}@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) tr.marked td{background:#183a28;color:#bfeccf}}:root[data-theme="dark"] tr.marked td{background:#183a28;color:#bfeccf}
 .note{background:var(--head);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--muted);margin-bottom:12px}
 button.t{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:8px 10px;cursor:pointer;font:inherit}
 @media(max-width:600px){.top h1{font-size:16px}}
@@ -68,10 +68,10 @@ button.t{border:1px solid var(--line);background:var(--card);color:var(--text);b
       <option value="old">Sort: Oldest dispatch first</option>
       <option value="name">Sort: Party name</option>
     </select>
-    <select id="flt"><option value="all">Show: All bills</option><option value="pend">Show: Not marked yet</option><option value="mark">Show: Marked only</option></select>
+    <select id="flt"><option value="all">Show: All bills</option><option value="pend">Show: Not cleared yet</option><option value="mark">Show: Cleared (green) only</option></select>
     <button class="t" id="toggle">Expand all</button>
   </div>
-  <div class="note">Marks are saved on this device/browser for the selected salesperson and stay after refresh and after new data is uploaded.
+  <div class="note">Tick the box against a bill to mark it green (cleared). Untick to undo. Ticks are saved on this device for the selected salesperson and stay after refresh and after new data is uploaded.
     <button class="mb" id="bk">⬇ Backup marks</button><button class="mb" id="rs">⬆ Restore</button><input type="file" id="rsf" accept=".json" hidden></div>
   <div class="cards" id="cards"></div>
   <div class="bar" id="bar"></div>
@@ -119,11 +119,10 @@ function init(D){
   $("sp").addEventListener("change",()=>{try{localStorage.setItem("sp",$("sp").value)}catch(e){};location.hash=encodeURIComponent($("sp").value)});
   $("toggle").onclick=()=>{allOpen=!allOpen;$("toggle").textContent=allOpen?"Collapse all":"Expand all";OPEN.clear();document.querySelectorAll(".party").forEach(e=>e.classList.toggle("open",allOpen))};
   $("list").addEventListener("click",e=>{
-    const b=e.target.closest("[data-act]");
+    const b=e.target.closest("input.ck");
     if(b){
-      const sp=$("sp").value,k=b.dataset.k,a=b.dataset.act;
-      if(a==="un"){setMark(sp,k,null)}
-      else{setMark(sp,k,{s:a,t:new Date().toISOString().slice(0,10)})}
+      const sp=$("sp").value,k=b.dataset.k;
+      setMark(sp,k,b.checked?{s:"ok",t:new Date().toISOString().slice(0,10)}:null);
       render();return;
     }
     const h=e.target.closest(".ph");
@@ -169,7 +168,7 @@ function render(){
     ag[bucket(r.days)]+=r.net;nb++;
   }));
   const pending=tot-cl-cq;
-  $("cards").innerHTML=[["Net outstanding",inr(tot)],["Still to follow up",inr(pending)],["Marked cleared",inr(cl)],["Cheque collected",inr(cq)],["Parties",parties.length],["Open bills (unmarked)",nb],["Over 30 days (unmarked)",inr(ag[2]+ag[3]+ag[4])],["Over 60 days (unmarked)",inr(ag[4])]]
+  $("cards").innerHTML=[["Net outstanding",inr(tot)],["Still to collect",inr(pending)],["Cleared (green)",inr(cl+cq)],["Parties",parties.length],["Open bills",nb],["Over 30 days",inr(ag[2]+ag[3]+ag[4])],["Over 60 days",inr(ag[4])]]
     .map(([a,b])=>`<div class="c"><small>${a}</small><b>${b}</b></div>`).join("");
   const posTot=ag.reduce((a,b)=>a+b,0)||1;
   $("bar").innerHTML=ag.map((v,i)=>`<div title="${BUCKETS[i].n}: ${inr(v)}" style="width:${v/posTot*100}%;background:${COLORS[i]}"></div>`).join("");
@@ -184,17 +183,15 @@ function render(){
     const chip=p.maxDays===null?"":`<span class="chip b${bucket(p.maxDays)}">Oldest: ${p.maxDays} days</span>`;
     const open=allOpen||OPEN.has(p.party);
     return `<div class="party${open?" open":""}" data-p="${esc(p.party)}">
-      <div class="ph"><div class="pn">${esc(p.party)}<span class="pm">${p.rows.length} entries${p.oldest?" · oldest unmarked dispatch "+fmtD(p.oldest):""}${p.pend!==p.total?" · total "+inr(p.total):""}</span></div>${chip}<div class="amt">₹ ${inr(p.pend)}</div></div>
-      <div class="bd"><table><thead><tr><th>Invoice</th><th>Inv. date</th><th>Dispatch</th><th>Days</th><th>Inv. amt</th><th>Received</th><th>Outstanding</th><th>Status</th></tr></thead><tbody>
+      <div class="ph"><div class="pn">${esc(p.party)}<span class="pm">${p.rows.length} entries${p.oldest?" · oldest pending dispatch "+fmtD(p.oldest):""}${p.pend!==p.total?" · total "+inr(p.total):""}</span></div>${chip}<div class="amt">₹ ${inr(p.pend)}</div></div>
+      <div class="bd"><table><thead><tr><th>Invoice</th><th>Dispatch</th><th>Days</th><th>Inv. amt</th><th>Received</th><th>Outstanding</th><th>Cleared</th></tr></thead><tbody>
       ${rows.map(r=>{
         const k=esc(bkey(r)),credit=!r.inv_amt&&r.net<0;
-        const st=credit?"":r.mk
-          ?`<span class="mk ${r.mk.s}">${r.mk.s==="ok"?"✔ Cleared":"🧾 Cheque"} · ${fmtD(r.mk.t).slice(0,6)}</span><button class="mb un" data-act="un" data-k="${k}">Undo</button>`
-          :`<button class="mb ok" data-act="ok" data-k="${k}">✔ Cleared</button><button class="mb cq" data-act="cq" data-k="${k}">🧾 Cheque</button>`;
-        return `<tr class="${r.mk?"marked":""}"><td>${esc(r.inv||r.book)}${credit?" <small>(unallocated)</small>":""}</td><td>${fmtD(r.inv_date)}</td><td>${fmtD(r.dispatch)}</td>
+        const st=credit?"":`<input type="checkbox" class="ck" data-k="${k}" ${r.mk?"checked":""} title="${r.mk?"Marked "+fmtD(r.mk.t)+" – untick to undo":"Tick when cleared"}">`;
+        return `<tr class="${r.mk?"marked":""}"><td>${esc(r.inv||r.book)}${credit?" <small>(unallocated)</small>":""}</td><td>${fmtD(r.dispatch)}</td>
         <td>${r.days===null?"—":`<span class="chip b${bucket(r.days)}">${r.days}</span>`}</td>
         <td>${r.inv_amt?inr(r.inv_amt):"—"}</td><td>${r.received?inr(r.received):"—"}</td><td class="${r.net<0?"cr":""}"><b>${inr(r.net)}</b></td><td class="st">${st}</td></tr>`}).join("")}
-      </tbody><tfoot><tr><td colspan="4">Total</td><td>${inr(inv)}</td><td>${inr(rec)}</td><td>${inr(sub)}</td><td></td></tr></tfoot></table></div></div>`;
+      </tbody><tfoot><tr><td colspan="3">Total</td><td>${inr(inv)}</td><td>${inr(rec)}</td><td>${inr(sub)}</td><td></td></tr></tfoot></table></div></div>`;
   }).join("");
 }
 $("theme").onclick=()=>{const r=document.documentElement,dark=getComputedStyle(r).getPropertyValue("--bg").trim()==="#12161c";r.dataset.theme=dark?"light":"dark"};
