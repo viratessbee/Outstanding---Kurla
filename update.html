@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Update – Outstanding Bills</title>
+<style>
+body{font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;max-width:640px;margin:0 auto;padding:20px 16px;background:#f5f6f8;color:#1c2430}
+@media(prefers-color-scheme:dark){body{background:#12161c;color:#e8ecf2}.box{background:#1b212a!important;border-color:#2b3340!important}}
+h1{font-size:20px}.box{background:#fff;border:1px solid #e3e7ee;border-radius:12px;padding:16px;margin:14px 0}
+button,.btn{background:#1f5eff;color:#fff;border:0;border-radius:8px;padding:11px 16px;font:inherit;font-weight:600;cursor:pointer}
+button[disabled]{opacity:.4;cursor:not-allowed}
+input[type=file]{width:100%;padding:10px 0}
+.ok{color:#1a9d5c;font-weight:600}.err{color:#d62f3a;font-weight:600}
+ol{padding-left:20px}
+</style>
+</head>
+<body>
+<h1>Daily Update – Outstanding Bills</h1>
+<div class="box"><b>Step 1.</b> Choose today's Excel report (the same “Customerwise Outstanding” file).
+<input type="file" id="f" accept=".xlsx,.xls"><div id="msg"></div></div>
+<div class="box"><b>Step 2.</b> Download the new data file.<br><br>
+<button id="dl" disabled>⬇ Download data.json</button></div>
+<div class="box"><b>Step 3.</b> Upload it to GitHub:
+<ol><li>Open your GitHub repo.</li><li><i>Add file</i> → <i>Upload files</i>.</li><li>Drag in <b>data.json</b> (it replaces the old one).</li><li>Click <i>Commit changes</i>. In 1–2 minutes the site shows the new data.</li></ol>
+Nothing is sent anywhere – the Excel is read inside your own browser.</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function toISO(v){
+  if(!v)return null;
+  if(v instanceof Date){const d=new Date(v.getTime()+12*36e5);return d.toISOString().slice(0,10)}
+  const m=String(v).trim().match(/^(\d{1,2})-(\w{3})-(\d{4})$/);
+  if(!m)return null;const i=MON.findIndex(x=>x.toLowerCase()===m[2].toLowerCase());
+  return i<0?null:`${m[3]}-${String(i+1).padStart(2,"0")}-${m[1].padStart(2,"0")}`;
+}
+const num=x=>{const n=parseFloat(x);return isNaN(n)?0:Math.round(n*100)/100};
+function convert(rows){
+  let report_date=null;
+  for(const r of rows.slice(0,6)){const m=String(r[0]||"").match(/To Date:\s*(\d{2}-\w{3}-\d{4})/);if(m)report_date=toISO(m[1])}
+  const parties={};let cur=null;
+  for(const r of rows){
+    if(r[0]==null||r[0]==="")continue;
+    const a=String(r[0]).trim();
+    if(a==="Book"||/^(ESSBEE|Customerwise|From Date)/.test(a))continue;
+    if(r.slice(1).every(v=>v==null||v==="")){cur=a;parties[cur]=parties[cur]||[];continue}
+    if(cur===null)continue;
+    parties[cur].push({book:a,inv:String(r[1]??""),inv_date:toISO(r[2]),inv_amt:num(r[3]),received:num(r[4]),os:num(r[5]),unalloc:num(r[8]),net:num(r[9]),dispatch:toISO(r[11]),sales:r[13]?String(r[13]).trim():"UNKNOWN"});
+  }
+  const out=[];
+  for(const [party,rs] of Object.entries(parties)){
+    if(!rs.length)continue;const c={};rs.forEach(x=>c[x.sales]=(c[x.sales]||0)+1);
+    out.push({party,sales:Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0],rows:rs});
+  }
+  return {report_date,parties:out};
+}
+if(typeof module!=="undefined")module.exports={convert};
+let result=null;
+if(typeof document!=="undefined"){
+document.getElementById("f").onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;const msg=document.getElementById("msg");
+  try{
+    const wb=XLSX.read(await f.arrayBuffer(),{type:"array",cellDates:true});
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:null});
+    result=convert(rows);
+    if(!result.report_date||!result.parties.length)throw new Error("Could not find the report date or any parties – is this the right report?");
+    const n=result.parties.reduce((s,p)=>s+p.rows.length,0);
+    const d=result.report_date.split("-").reverse().join("-");
+    msg.innerHTML=`<p class="ok">✔ Read OK – report date ${d}, ${result.parties.length} parties, ${n} entries.</p>`;
+    document.getElementById("dl").disabled=false;
+  }catch(err){msg.innerHTML=`<p class="err">${err.message}</p>`;document.getElementById("dl").disabled=true}
+};
+document.getElementById("dl").onclick=()=>{
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(result)],{type:"application/json"}));a.download="data.json";a.click();
+};}
+</script>
+</body>
+</html>

@@ -10,12 +10,12 @@ bill-wise outstanding with **days counted from the dispatch date**.
 4. Link will be `https://<your-username>.github.io/<repo-name>/`
    Per-salesperson link: add `#Name`, e.g. `.../outstanding/#Nitish`
 
-## Daily update
-```
-pip install openpyxl
-python convert.py OS_<date>.xlsx      # creates a fresh data.json
-```
-Upload the new `data.json` to the repo (Add file → Upload files → replace). Done.
+## Daily update (no Python needed)
+1. Open `update.html` (double-click it on your computer, or use `.../outstanding/update.html` online).
+2. Choose today's Excel report -> it shows "Read OK".
+3. Click **Download data.json**.
+4. GitHub repo -> Add file -> Upload files -> drag `data.json` -> Commit changes.
+(`convert.py` still works as an alternative: `python convert.py OS_<date>.xlsx`)
 
 ## Marking bills
 Each bill has a tick box; ticked bills turn green (cleared); untick to undo. Marks are stored in the salesperson's

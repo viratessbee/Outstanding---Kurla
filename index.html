@@ -39,7 +39,7 @@ select{min-width:170px;font-weight:600}input{flex:1;min-width:160px}
 table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
 th,td{padding:7px 10px;text-align:right;white-space:nowrap}
 th{background:var(--head);color:var(--muted);font-weight:600;font-size:12px}
-th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+th:nth-child(-n+3),td:nth-child(-n+3){text-align:left}th:first-child,td:first-child{text-align:center;width:44px}
 tr+tr td{border-top:1px solid var(--line)}
 tfoot td{font-weight:700;background:var(--head)}
 .cr{color:var(--g)}
@@ -184,14 +184,14 @@ function render(){
     const open=allOpen||OPEN.has(p.party);
     return `<div class="party${open?" open":""}" data-p="${esc(p.party)}">
       <div class="ph"><div class="pn">${esc(p.party)}<span class="pm">${p.rows.length} entries${p.oldest?" · oldest pending dispatch "+fmtD(p.oldest):""}${p.pend!==p.total?" · total "+inr(p.total):""}</span></div>${chip}<div class="amt">₹ ${inr(p.pend)}</div></div>
-      <div class="bd"><table><thead><tr><th>Invoice</th><th>Dispatch</th><th>Days</th><th>Inv. amt</th><th>Received</th><th>Outstanding</th><th>Cleared</th></tr></thead><tbody>
+      <div class="bd"><table><thead><tr><th>✔</th><th>Invoice</th><th>Dispatch</th><th>Days</th><th>Inv. amt</th><th>Received</th><th>Outstanding</th></tr></thead><tbody>
       ${rows.map(r=>{
         const k=esc(bkey(r)),credit=!r.inv_amt&&r.net<0;
         const st=credit?"":`<input type="checkbox" class="ck" data-k="${k}" ${r.mk?"checked":""} title="${r.mk?"Marked "+fmtD(r.mk.t)+" – untick to undo":"Tick when cleared"}">`;
-        return `<tr class="${r.mk?"marked":""}"><td>${esc(r.inv||r.book)}${credit?" <small>(unallocated)</small>":""}</td><td>${fmtD(r.dispatch)}</td>
+        return `<tr class="${r.mk?"marked":""}"><td>${st}</td><td>${esc(r.inv||r.book)}${credit?" <small>(unallocated)</small>":""}</td><td>${fmtD(r.dispatch)}</td>
         <td>${r.days===null?"—":`<span class="chip b${bucket(r.days)}">${r.days}</span>`}</td>
-        <td>${r.inv_amt?inr(r.inv_amt):"—"}</td><td>${r.received?inr(r.received):"—"}</td><td class="${r.net<0?"cr":""}"><b>${inr(r.net)}</b></td><td class="st">${st}</td></tr>`}).join("")}
-      </tbody><tfoot><tr><td colspan="3">Total</td><td>${inr(inv)}</td><td>${inr(rec)}</td><td>${inr(sub)}</td><td></td></tr></tfoot></table></div></div>`;
+        <td>${r.inv_amt?inr(r.inv_amt):"—"}</td><td>${r.received?inr(r.received):"—"}</td><td class="${r.net<0?"cr":""}"><b>${inr(r.net)}</b></td></tr>`}).join("")}
+      </tbody><tfoot><tr><td colspan="4">Total</td><td>${inr(inv)}</td><td>${inr(rec)}</td><td>${inr(sub)}</td></tr></tfoot></table></div></div>`;
   }).join("");
 }
 $("theme").onclick=()=>{const r=document.documentElement,dark=getComputedStyle(r).getPropertyValue("--bg").trim()==="#12161c";r.dataset.theme=dark?"light":"dark"};
