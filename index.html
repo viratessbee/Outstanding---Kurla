@@ -48,7 +48,7 @@ td.st{text-align:right;white-space:nowrap}
 .mb{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:7px;padding:4px 8px;cursor:pointer;font:inherit;font-size:12px;margin-left:4px}
 .mb.ok{border-color:var(--g);color:var(--g)}.mb.cq{border-color:var(--accent);color:var(--accent)}.mb.un{border-color:var(--r);color:var(--r)}
 .mk{font-size:12px;font-weight:600}.mk.ok{color:var(--g)}.mk.cq{color:var(--accent)}
-tr.marked td{background:#dff5e9;color:#0f4d2c}tr.marked .chip{outline:1px solid #fff}input.ck{width:20px;height:20px;accent-color:#1a9d5c;cursor:pointer;flex:none;min-width:0;padding:0}@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) tr.marked td{background:#183a28;color:#bfeccf}}:root[data-theme="dark"] tr.marked td{background:#183a28;color:#bfeccf}
+b.cdm{color:var(--r);font-size:17px;line-height:1}tr.marked td{background:#dff5e9;color:#0f4d2c}tr.marked .chip{outline:1px solid #fff}input.ck{width:20px;height:20px;accent-color:#1a9d5c;cursor:pointer;flex:none;min-width:0;padding:0}@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) b.cdm{color:var(--r);font-size:17px;line-height:1}tr.marked td{background:#183a28;color:#bfeccf}}:root[data-theme="dark"] b.cdm{color:var(--r);font-size:17px;line-height:1}tr.marked td{background:#183a28;color:#bfeccf}
 .note{background:var(--head);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--muted);margin-bottom:12px}
 button.t{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:8px 10px;cursor:pointer;font:inherit}
 @media(max-width:600px){.top h1{font-size:16px}}
@@ -73,6 +73,7 @@ button.t{border:1px solid var(--line);background:var(--card);color:var(--text);b
   </div>
   <div class="note">Tick the box against a bill to mark it green (cleared). Untick to undo. Ticks are saved on this device for the selected salesperson and stay after refresh and after new data is uploaded.
     <button class="mb" id="bk">⬇ Backup marks</button><button class="mb" id="rs">⬆ Restore</button><input type="file" id="rsf" accept=".json" hidden></div>
+  <div class="note" style="margin-top:-4px"><b class="cdm" style="color:var(--r)">*</b> next to an invoice = CD already deducted in that bill.</div>
   <div class="cards" id="cards"></div>
   <div class="bar" id="bar"></div>
   <div class="legend" id="legend"></div>
@@ -145,8 +146,12 @@ function init(D){
 
 function render(){
   const sp=$("sp").value,q=$("q").value.trim().toLowerCase(),flt=$("flt").value;
-  let parties=(BYSP[sp]||[]).map(p=>{
-    const rows=p.rows.map(r=>({...r,mk:getMark(sp,r)}));
+  const all=BYSP[sp]||[];
+  const exact=q&&all.some(p=>p.rows.some(r=>r.inv.toLowerCase()===q));
+  const invHit=r=>exact?r.inv.toLowerCase()===q:r.inv.toLowerCase().includes(q);
+  let parties=all.map(p=>{
+    const nameHit=!q||p.party.toLowerCase().includes(q);
+    const rows=p.rows.filter(r=>nameHit||invHit(r)).map(r=>({...r,mk:getMark(sp,r)}));
     const total=rows.reduce((s,r)=>s+r.net,0);
     const pend=rows.filter(r=>!r.mk).reduce((s,r)=>s+r.net,0);
     const bills=rows.filter(r=>r.days!==null&&r.net>0&&!r.mk);
@@ -154,7 +159,6 @@ function render(){
     const oldest=bills.length?bills.reduce((a,b)=>b.days>a.days?b:a).dispatch:null;
     return {...p,rows,total,pend,maxDays,oldest};
   }).filter(p=>p.rows.some(r=>r.net));
-  if(q)parties=parties.filter(p=>p.party.toLowerCase().includes(q)||p.rows.some(r=>r.inv.toLowerCase().includes(q)));
   if(flt==="pend")parties=parties.filter(p=>p.rows.some(r=>!r.mk));
   if(flt==="mark")parties=parties.filter(p=>p.rows.some(r=>r.mk));
   const s=$("sort").value;
@@ -181,14 +185,14 @@ function render(){
     if(flt==="mark")rows=rows.filter(r=>r.mk);
     const inv=rows.reduce((s,r)=>s+r.inv_amt,0),rec=rows.reduce((s,r)=>s+r.received,0),sub=rows.reduce((s,r)=>s+r.net,0);
     const chip=p.maxDays===null?"":`<span class="chip b${bucket(p.maxDays)}">Oldest: ${p.maxDays} days</span>`;
-    const open=allOpen||OPEN.has(p.party);
+    const open=allOpen||OPEN.has(p.party)||!!q;
     return `<div class="party${open?" open":""}" data-p="${esc(p.party)}">
       <div class="ph"><div class="pn">${esc(p.party)}<span class="pm">${p.rows.length} entries${p.oldest?" · oldest pending dispatch "+fmtD(p.oldest):""}${p.pend!==p.total?" · total "+inr(p.total):""}</span></div>${chip}<div class="amt">₹ ${inr(p.pend)}</div></div>
       <div class="bd"><table><thead><tr><th>✔</th><th>Invoice</th><th>Dispatch</th><th>Days</th><th>Inv. amt</th><th>Received</th><th>Outstanding</th></tr></thead><tbody>
       ${rows.map(r=>{
         const k=esc(bkey(r)),credit=!r.inv_amt&&r.net<0;
         const st=credit?"":`<input type="checkbox" class="ck" data-k="${k}" ${r.mk?"checked":""} title="${r.mk?"Marked "+fmtD(r.mk.t)+" – untick to undo":"Tick when cleared"}">`;
-        return `<tr class="${r.mk?"marked":""}"><td>${st}</td><td>${esc(r.inv||r.book)}${credit?" <small>(unallocated)</small>":""}</td><td>${fmtD(r.dispatch)}</td>
+        return `<tr class="${r.mk?"marked":""}"><td>${st}</td><td>${esc(r.inv||r.book)}${r.cd?' <b class="cdm" title="CD deducted">*</b>':""}${credit?" <small>(unallocated)</small>":""}</td><td>${fmtD(r.dispatch)}</td>
         <td>${r.days===null?"—":`<span class="chip b${bucket(r.days)}">${r.days}</span>`}</td>
         <td>${r.inv_amt?inr(r.inv_amt):"—"}</td><td>${r.received?inr(r.received):"—"}</td><td class="${r.net<0?"cr":""}"><b>${inr(r.net)}</b></td></tr>`}).join("")}
       </tbody><tfoot><tr><td colspan="4">Total</td><td>${inr(inv)}</td><td>${inr(rec)}</td><td>${inr(sub)}</td></tr></tfoot></table></div></div>`;

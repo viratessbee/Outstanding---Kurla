@@ -38,7 +38,7 @@ for r in ws.iter_rows(min_row=1, values_only=True):
         "book": a, "inv": str(r[1] or ""), "inv_date": d(r[2]),
         "inv_amt": inv_amt, "received": num(r[4]), "os": os_amt,
         "unalloc": num(r[8]), "net": net,
-        "dispatch": d(r[11]), "sales": (str(r[13]).strip() if r[13] else "UNKNOWN"),
+        "dispatch": d(r[11]), "cd": str(r[12] or "").strip() == "#", "sales": (str(r[13]).strip() if r[13] else "UNKNOWN"),
     })
 
 # Salesman = most common on the party's rows (a party sits with one salesperson)

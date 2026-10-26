@@ -45,7 +45,7 @@ function convert(rows){
     if(a==="Book"||/^(ESSBEE|Customerwise|From Date)/.test(a))continue;
     if(r.slice(1).every(v=>v==null||v==="")){cur=a;parties[cur]=parties[cur]||[];continue}
     if(cur===null)continue;
-    parties[cur].push({book:a,inv:String(r[1]??""),inv_date:toISO(r[2]),inv_amt:num(r[3]),received:num(r[4]),os:num(r[5]),unalloc:num(r[8]),net:num(r[9]),dispatch:toISO(r[11]),sales:r[13]?String(r[13]).trim():"UNKNOWN"});
+    parties[cur].push({book:a,inv:String(r[1]??""),inv_date:toISO(r[2]),inv_amt:num(r[3]),received:num(r[4]),os:num(r[5]),unalloc:num(r[8]),net:num(r[9]),dispatch:toISO(r[11]),cd:String(r[12]??"").trim()==="#",sales:r[13]?String(r[13]).trim():"UNKNOWN"});
   }
   const out=[];
   for(const [party,rs] of Object.entries(parties)){

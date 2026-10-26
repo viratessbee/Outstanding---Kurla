@@ -17,6 +17,9 @@ bill-wise outstanding with **days counted from the dispatch date**.
 4. GitHub repo -> Add file -> Upload files -> drag `data.json` -> Commit changes.
 (`convert.py` still works as an alternative: `python convert.py OS_<date>.xlsx`)
 
+## Search and CD
+Searching an invoice number shows only that invoice (exact match first). A red * beside an invoice means CD is already deducted (the `#` in the Cd. column of the Excel).
+
 ## Marking bills
 Each bill has a tick box; ticked bills turn green (cleared); untick to undo. Marks are stored in the salesperson's
 own browser (localStorage), keyed by salesperson + book + invoice no + invoice date, so they stay after
